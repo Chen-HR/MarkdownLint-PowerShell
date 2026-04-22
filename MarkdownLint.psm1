@@ -31,51 +31,57 @@ function Invoke-MarkdownLint {
         # Sym: General Symbols (Math, Brackets, Quotes, etc.)
         $sym           = '[\(\)\[\]`\$“”"''\+\-\*\/=><_#%]'
         # DoubleSym: Specific for Bold and Italic markers (** or __)
-        $doubleSym     = '[\*_~]{2}'
+        $doubleSym     = '[\*_~\|]{2}'
         # ExcludePrefix: Negative Lookbehind used to ensure the character is NOT a Markdown List/Header/Quote marker
         # Logic: Current character must NOT be preceded by #, +, -, *, >, or whitespace at the start of a line
-        $excludePrefix = '[^#\+\-\*>\s]'
+        # $excludePrefix = '[^#\+\-\*>\s]'
         # Spc: Single space
         $spc           = ' '
-
+        $spcsym        = '[\n\t ]'
+        $newline       = '\r*\n'
+        $mathlineend   = '$$$$($1)
+'
         # --- 2. Regex Replacement Logic (Ordered Map ensures execution sequence) ---
         $regexMap = [ordered]@{
-            # A. Basic Full-width to Half-width Conversion
+            # Basic Full-width to Half-width Conversion
             '（' = '('
             '）' = ')'
             '？' = '?'
             
-            # B. Basic CJK-English Spacing Removal (includes newline/tab removal for compact paragraphs)
-            "($cjk)[\n\t ]($eng)"  = '$1$2'
-            "($cjk)[\n\t ]($cjk)"  = '$1$2'
-            "($eng)[\n\t ]($cjk)"  = '$1$2'
-            
-            # C. Symbol Spacing Removal (Protecting Markdown Syntax)
-            # Example: "Var = 1" -> "Var=1" (Tightens symbols based on requirements)
-            # Excludes list symbols (e.g., "- -") from being merged
-            "(?<=$excludePrefix)($sym)$spc($sym)"  = '$1$2'
+            # Basic CJK Spacing Removal
+            "($cjk)$spcsym($eng)" = '$1$2'
+            "($cjk)$spcsym($cjk)" = '$1$2'
+            "($eng)$spcsym($cjk)" = '$1$2'
+            "($cjk)$spc*($sym)$spc*($eng)" = '$1$2$3'
+            "($cjk)$spc*($sym)$spc*($cjk)" = '$1$2$3'
+            "($eng)$spc*($sym)$spc*($cjk)" = '$1$2$3'
+            "($cjk)$spc*($doubleSym)$spc*($eng)" = '$1$2$3'
+            "($cjk)$spc*($doubleSym)$spc*($cjk)" = '$1$2$3'
+            "($eng)$spc*($doubleSym)$spc*($cjk)" = '$1$2$3'
 
-            # D. Bold/Italic (** or __) Special Handling
-            # 1. CJK followed by Bold (Remove space): "Chinese **Bold**" -> "Chinese**Bold**"
-            "($cjk)$spc($doubleSym)" = '$1$2'
-            # 2. Bold followed by Space (Fix): "**Bold** " (Removes trailing space or space connecting to next word)
-            "($cjk)($doubleSym)$spc" = '$1$2'
-            # 3. Space followed by Bold followed by CJK (Remove space): " **Chinese" -> "**Chinese"
-            # Must exclude list start (e.g., "- **")
-            "(?<=$excludePrefix)$spc($doubleSym)($cjk)" = '$1$2'
-            # 4. Bold followed by CJK (Remove space): "**Bold** Chinese" -> "**Bold**Chinese"
-            "($doubleSym)$spc($cjk)" = '$1$2'
-            
-            # E. General Symbols mixed with CJK
-            # 1. CJK followed by Symbol: "Chinese (" -> "Chinese("
-            "($cjk)$spc($sym)" = '$1$2'
-            # 2. Symbol followed by CJK: ") Chinese" -> ")Chinese"
-            # Also excludes Markdown list symbols
-            "(?<=$excludePrefix)($sym)$spc($cjk)" = '$1$2'
-            
-            # F. Slash / Path Handling
-            # "/ Chinese" -> "/Chinese" (Fixes path or option separators)
-            "\/$spc($cjk)" = '/$1'
+            # Math
+            "  \$"        = ' $'
+            "\$ ([,. ])"  = '$$$1'
+            "\$\$\r*\n *\r*\n\$\$=" = '\\\\='
+            "``````html\r*\n\$\$" = '$$$$'
+            "\$\$\r*\n$spc*\((\d+)\)" = '$$$$($1)'
+            "[\(\{](\d+)[\)\}]\$\$\r*\n" = $mathlineend
+            "$spc*\\tag\$\$\((\d+)\)\r*\n" = $mathlineend
+            "$spc*\\quad\$\$\((\d+)\)\r*\n" = $mathlineend
+            "$spc*\\\$\$\((\d+)\)\r*\n" = $mathlineend
+            "$spc*\$\$\((\d+)\)\r*\n" = $mathlineend
+            "$spc*\$\$\((\d+)\)\r*\n``````\r*\n" = $mathlineend
+            "$spc*\$\$\r*\n *\r*\n\$\$\$\$\((\d+)\)" = $mathlineend
+            "([_^])\{([a-zA-Z0-9-+*])\}" = '$1$2'
+
+            "!\[\]\(_page_(\d+)_Picture_(\d+)\.jpeg\)\r*\n\r*\n\**Fig. (\d+).\**" = '![fig$3](_page_$1_Picture_$2.jpeg)
+Fig. $3.'
+            "!\[\]\(_page_(\d+)_Figure_(\d+)\.jpeg\)\r*\n\r*\n\**Fig. (\d+).\**" = '![fig$3](_page_$1_Figure_$2.jpeg)
+Fig. $3.'
+            "!\[\]\(_page_(\d+)_Picture_(\d+)\.jpeg\)\r*\n\r*\n!\[fig(\d+)\]\(_page_(\d+)_Picture_(\d+)\.jpeg\)" = '![fig$3](_page_$1_Picture_$2.jpeg)
+![fig$3](_page_$4_Picture_$5.jpeg)'
+            "!\[\]\(_page_(\d+)_Figure_(\d+)\.jpeg\)\r*\n\r*\n!\[fig(\d+)\]\(_page_(\d+)_Figure_(\d+)\.jpeg\)" = '![fig$3](_page_$1_Figure_$2.jpeg)
+![fig$3](_page_$4_Figure_$5.jpeg)'
         }
 
         # --- 3. File Processing (Encoding Safe) ---
