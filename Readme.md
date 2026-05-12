@@ -1,66 +1,54 @@
 # MarkdownLint (PowerShell)
 
-![PowerShell](https://img.shields.io/badge/PowerShell-7.0%2B-%235391FE.svg?style=for-the-badge&logo=powershell&logoColor=white)
-![Platform](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-lightgrey.svg?style=for-the-badge)
-![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
+<div align="center">
 
-**MarkdownLint** is a specialized PowerShell module designed to automate formatting correction for Markdown files. It focuses on optimizing the spacing between **CJK (Chinese, Japanese, Korean)** characters and Latin (English) text, while strictly preserving Markdown syntax structure.
+English &nbsp;&nbsp;|&nbsp;&nbsp; [Chinese Traditional](./Readme(zh-TW).md)
 
----
+</div>
+
+**MarkdownLint** is a specialized PowerShell module designed to automate formatting correction for Markdown files. It focuses on optimizing the spacing between **CJK (Chinese, Japanese, Korean)** characters and Latin (English) text while strictly preserving Markdown syntax integrity.
 
 ## 🚀 Features
 
-* **Smart Spacing Removal**: Removes redundant spaces between CJK and English/Numbers.
-* **Symbol Standardization**: Converts Full-width brackets `（）` to Half-width `()`.
-* **Punctuation Optimization**: Handles spacing around Full-width punctuation (e.g., `：`, `，`, `。`).
-* **Syntax Protection**: Strictly excludes Markdown syntax markers (Headers `#`, Lists `-`, Blockquotes `>`) from formatting rules to prevent layout corruption.
-* **Complex Formatting Support**: Correctly handles Bold (`**`), Italic (`__`), and Slash (`/`) logic within mixed language sentences.
+* **Precise Spacing Control**: Automatically removes redundant spaces between CJK and English/Numeric characters to maintain professional typesetting.
+* **Symbol Standardization**: Converts full-width brackets `（）` and question marks `？` to half-width `()` `?` for technical consistency.
+* **Punctuation Optimization**: Refines the placement and spacing of full-width punctuation (e.g., `：`, `，`, `。`) in mixed-language contexts.
+* **Syntax Protection**: Implements a robust exclusion mechanism for Markdown markers (Headers `#`, Lists `-`, Blockquotes `>`) to prevent formatting corruption.
+* **Advanced LaTeX/Math Support**: Specialized regex patterns for KaTeX block and inline math formatting, including automated tag and alignment correction.
 
----
+## 📦 Installation & Usage
 
-## 📦 Installation
-
-1. Download the `MarkdownLint` folder containing `.psd1` and `.psm1` files.
-2. Place the folder into your PowerShell modules path:
-   * **Windows**: `C:\Users\<User>\Documents\PowerShell\Modules\`
-   * **macOS/Linux**: `~/.local/share/powershell/Modules/`
-
-Alternatively, you can import it manually from any location:
+### Import Module
 
 ```powershell
 Import-Module ".\Path\To\MarkdownLint\MarkdownLint.psd1"
-
 ```
 
----
+### Direct File Processing
+
+```powershell
+Invoke-MarkdownLint -FilePath ".\YourDocument.md"
+```
+
+### Pipeline Support (Batch Processing)
+
+```powershell
+Get-ChildItem -Path ".\Docs" -Filter "*.md" | Invoke-MarkdownLint
+```
 
 ## 📝 Formatting Rules
 
 | Category | Description | Before | After |
-| --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- |
 | **Spacing** | CJK ↔ English | `你好 World` | `你好World` |
 | **Spacing** | CJK ↔ CJK | `中 文` | `中文` |
 | **Brackets** | Full-width to Half | `說明（一）` | `說明(一)` |
-| **Bold** | CJK + Bold | `重點 **說明**` | `重點**說明**` |
-| **Colon** | Full-width Colon | `定義 : Agent` | `定義：Agent` |
-| **Slash** | Path/Option | `選項 / Option` | `選項/ Option` |
+| **Bold** | CJK ↔ Bold Marker | `重點 **說明**` | `重點**說明**` |
+| **Punctuation** | Full-width Colon | `定義: Agent` | `定義：Agent` |
+| **Slash** | Path/Option | `選項 / Option` | `選項/Option` |
 | **Syntax** | **Protected** | `- **List Item**` | `- **List Item**` (Unchanged) |
-
----
 
 ## ⚠️ Requirements
 
 * **PowerShell**: Version 7.0 or higher is recommended (supports cross-platform).
 * **Encoding**: Files are processed and saved in **UTF-8**.
-
----
-
-## 🤝 Contributing
-
-Contributions, issues, and feature requests are welcome!
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License.

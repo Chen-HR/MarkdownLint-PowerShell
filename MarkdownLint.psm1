@@ -1,47 +1,47 @@
 function Invoke-MarkdownLint {
     <#
     .SYNOPSIS
-        Automated Markdown syntax and formatting correction tool (Final Version).
+        Automated Markdown syntax and formatting correction tool.
         
     .DESCRIPTION
-        Automatically handles spacing between mixed CJK and English text, converts full-width characters to half-width, and corrects punctuation positioning.
-        Specifically optimized for CJK (Chinese/Japanese/Korean) languages while strictly preserving Markdown syntax structure.
+        Directly processes a specified Markdown file to handle spacing between mixed CJK and English text, 
+        converts full-width characters to half-width, and corrects punctuation.
+        This version targets a specific file path without directory recursion.
 
     .EXAMPLE
-        Invoke-MarkdownLint -Path "C:\Docs" -Recurse
+        Invoke-MarkdownLint -FilePath "C:\Docs\README.md"
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $false, ValueFromPipeline = $true)]
-        [string]$Path = ".",
-
-        [Parameter()]
-        [switch]$Recurse
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
+        [Alias("Path", "FullName")]
+        [string]$FilePath
     )
 
     process {
-        $searchPath = Join-Path $Path "*.md"
-        $targetFiles = Get-ChildItem -Path $searchPath -Recurse:$Recurse
+        # --- 1. Validation ---
+        if (-not (Test-Path -Path $FilePath -PathType Leaf)) {
+            Write-Error "File not found or is a directory: $FilePath"
+            return
+        }
 
-        # --- 1. Define Character Classes ---
-        # CJK: Unified Ideographs + Common Full-width Punctuation
+        if ($FilePath -notmatch '\.md$') {
+            Write-Warning "File '$FilePath' does not have a .md extension. Skipping."
+            return
+        }
+
+        # --- 2. Define Character Classes ---
         $cjk           = '[\u4e00-\u9fa5，。！？；：、「」『』（）【】—－]'
-        # Eng: Alphanumeric characters
         $eng           = '[a-zA-Z0-9]'
-        # Sym: General Symbols (Math, Brackets, Quotes, etc.)
         $sym           = '[\(\)\[\]`\$“”"''\+\-\*\/=><_#%]'
-        # DoubleSym: Specific for Bold and Italic markers (** or __)
         $doubleSym     = '[\*_~\|]{2}'
-        # ExcludePrefix: Negative Lookbehind used to ensure the character is NOT a Markdown List/Header/Quote marker
-        # Logic: Current character must NOT be preceded by #, +, -, *, >, or whitespace at the start of a line
-        # $excludePrefix = '[^#\+\-\*>\s]'
-        # Spc: Single space
         $spc           = ' '
-        $spcsym        = '[\n\t ]'
         $newline       = '\r*\n'
-        $mathlineend   = '$$$$($1)
-'
-        # --- 2. Regex Replacement Logic (Ordered Map ensures execution sequence) ---
+        $dollarsym     = '\$'
+        $doubledollarsym = '\$\$'
+        $mathlineend   = '$$$$($1)' + "`n"
+
+        # --- 3. Regex Replacement Logic ---
         $regexMap = [ordered]@{
             # Basic Full-width to Half-width Conversion
             '（' = '('
@@ -49,9 +49,9 @@ function Invoke-MarkdownLint {
             '？' = '?'
             
             # Basic CJK Spacing Removal
-            "($cjk)$spcsym($eng)" = '$1$2'
-            "($cjk)$spcsym($cjk)" = '$1$2'
-            "($eng)$spcsym($cjk)" = '$1$2'
+            "($cjk)$spc*($eng)" = '$1$2'
+            "($cjk)$spc*($cjk)" = '$1$2'
+            "($eng)$spc*($cjk)" = '$1$2'
             "($cjk)$spc*($sym)$spc*($eng)" = '$1$2$3'
             "($cjk)$spc*($sym)$spc*($cjk)" = '$1$2$3'
             "($eng)$spc*($sym)$spc*($cjk)" = '$1$2$3'
@@ -60,48 +60,66 @@ function Invoke-MarkdownLint {
             "($eng)$spc*($doubleSym)$spc*($cjk)" = '$1$2$3'
 
             # Math
-            "  \$"        = ' $'
-            "\$ ([,. ])"  = '$$$1'
-            "\$\$\r*\n *\r*\n\$\$=" = '\\\\='
-            "``````html\r*\n\$\$" = '$$$$'
-            "\$\$\r*\n$spc*\((\d+)\)" = '$$$$($1)'
-            "[\(\{](\d+)[\)\}]\$\$\r*\n" = $mathlineend
-            "$spc*\\tag\$\$\((\d+)\)\r*\n" = $mathlineend
-            "$spc*\\quad\$\$\((\d+)\)\r*\n" = $mathlineend
-            "$spc*\\\$\$\((\d+)\)\r*\n" = $mathlineend
-            "$spc*\$\$\((\d+)\)\r*\n" = $mathlineend
-            "$spc*\$\$\((\d+)\)\r*\n``````\r*\n" = $mathlineend
-            "$spc*\$\$\r*\n *\r*\n\$\$\$\$\((\d+)\)" = $mathlineend
             "([_^])\{([a-zA-Z0-9-+*])\}" = '$1$2'
 
-            "!\[\]\(_page_(\d+)_Picture_(\d+)\.jpeg\)\r*\n\r*\n\**Fig. (\d+).\**" = '![fig$3](_page_$1_Picture_$2.jpeg)
+            ## Inline KaTex
+            "  $dollarsym"        = ' $'
+            "$dollarsym$spc*([,. ])"  = '$$$1'
+            "$dollarsym$spc*($cjk)" = '$$$1'
+
+            ## Bolck KaTex
+            ### phase 0
+            "$newline$doubledollarsym$spc+" = '
+$$$$'
+
+            ### phase 1
+            ### phase 1.1
+            "$doubledollarsym$newline*$newline*$spc*\((\d+)\)" = '$$$$($1)'
+            ### phase 1.2
+            "$spc*$doubledollarsym$newline$spc*$newline*$doubledollarsym\((\d+)\)$doubledollarsym$newline*" = $mathlineend
+            "[\(\{](\d+)[\)\}]$doubledollarsym$spc*$newline" = $mathlineend
+            ### phase 1.3
+            "$spc*\\tag$doubledollarsym\((\d+)\)$newline" = $mathlineend
+            "$spc*\\quad$doubledollarsym\((\d+)\)$newline" = $mathlineend
+            "$spc*\\$doubledollarsym\((\d+)\)$newline" = $mathlineend
+            "$spc*$doubledollarsym\((\d+)\)$newline" = $mathlineend
+
+            ### phase 2
+            "$spc*$doubledollarsym$newline$spc*$newline$doubledollarsym$spc*=" = '\\\\='
+
+            ### phase 3
+            "``````html$newline$doubledollarsym" = '$$$$'
+            "$spc*$doubledollarsym\((\d+)\)$newline``````$newline" = $mathlineend
+
+            ### phase 4
+            "$spc+$doubledollarsym$newline" = '$$$$
+'
+
+            # Format the image format of the Marker
+            "!\[\]\(_page_(\d+)_Picture_(\d+)\.jpeg\)$newline$newline\**Fig. (\d+).\**" = '![fig$3](_page_$1_Picture_$2.jpeg)
 Fig. $3.'
-            "!\[\]\(_page_(\d+)_Figure_(\d+)\.jpeg\)\r*\n\r*\n\**Fig. (\d+).\**" = '![fig$3](_page_$1_Figure_$2.jpeg)
+            "!\[\]\(_page_(\d+)_Figure_(\d+)\.jpeg\)$newline$newline\**Fig. (\d+).\**" = '![fig$3](_page_$1_Figure_$2.jpeg)
 Fig. $3.'
-            "!\[\]\(_page_(\d+)_Picture_(\d+)\.jpeg\)\r*\n\r*\n!\[fig(\d+)\]\(_page_(\d+)_Picture_(\d+)\.jpeg\)" = '![fig$3](_page_$1_Picture_$2.jpeg)
+            "!\[\]\(_page_(\d+)_Picture_(\d+)\.jpeg\)$newline$newline!\[fig(\d+)\]\(_page_(\d+)_Picture_(\d+)\.jpeg\)" = '![fig$3](_page_$1_Picture_$2.jpeg)
 ![fig$3](_page_$4_Picture_$5.jpeg)'
-            "!\[\]\(_page_(\d+)_Figure_(\d+)\.jpeg\)\r*\n\r*\n!\[fig(\d+)\]\(_page_(\d+)_Figure_(\d+)\.jpeg\)" = '![fig$3](_page_$1_Figure_$2.jpeg)
+            "!\[\]\(_page_(\d+)_Figure_(\d+)\.jpeg\)$newline$newline!\[fig(\d+)\]\(_page_(\d+)_Figure_(\d+)\.jpeg\)" = '![fig$3](_page_$1_Figure_$2.jpeg)
 ![fig$3](_page_$4_Figure_$5.jpeg)'
         }
 
-        # --- 3. File Processing (Encoding Safe) ---
-        foreach ($file in $targetFiles) {
-            try {
-                # Use .NET class to read, ensuring UTF-8 without file locking
-                $content = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
-                
-                # Execute Regex replacements in order
-                foreach ($pattern in $regexMap.Keys) {
-                    $content = [regex]::Replace($content, $pattern, $regexMap[$pattern])
-                }
-                
-                # Write back to file
-                [System.IO.File]::WriteAllText($file.FullName, $content, [System.Text.Encoding]::UTF8)
-                Write-Host "Processed: $($file.Name)" -ForegroundColor Green
+        # --- 4. File Processing ---
+        try {
+            $absPath = (Resolve-Path -Path $FilePath).Path
+            $content = [System.IO.File]::ReadAllText($absPath, [System.Text.Encoding]::UTF8)
+            
+            foreach ($pattern in $regexMap.Keys) {
+                $content = [regex]::Replace($content, $pattern, $regexMap[$pattern])
             }
-            catch {
-                Write-Error "Failed to process $($file.FullName): $($_.Exception.Message)"
-            }
+            
+            [System.IO.File]::WriteAllText($absPath, $content, [System.Text.Encoding]::UTF8)
+            Write-Host "Successfully processed: $absPath" -ForegroundColor Green
+        }
+        catch {
+            Write-Error "Failed to process $FilePath : $($_.Exception.Message)"
         }
     }
 }
