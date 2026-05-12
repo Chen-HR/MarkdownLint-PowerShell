@@ -58,6 +58,8 @@ function Invoke-MarkdownLint {
             "($cjk)$spc*($doubleSym)$spc*($eng)" = '$1$2$3'
             "($cjk)$spc*($doubleSym)$spc*($cjk)" = '$1$2$3'
             "($eng)$spc*($doubleSym)$spc*($cjk)" = '$1$2$3'
+            "($cjk)$spc+``" = '$1`'
+            "``$spc+($cjk)" = '`$1'
 
             # Math
             "([_^])\{([a-zA-Z0-9-+*])\}" = '$1$2'
